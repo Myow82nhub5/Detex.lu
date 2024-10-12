@@ -1,0 +1,183 @@
+-- Variables
+local player = game.Players.LocalPlayer
+local mouse = player:GetMouse()
+local camera = workspace.CurrentCamera
+local aimActive = false
+local autoShootActive = false -- Auto Shoot toggle
+local lastTarget = nil
+local predictionFactor = 0.1232 -- Prediction factor
+local targetList = {}
+local targetIndex = 1
+local zoomAmount = 5 -- Amount of camera zoom when aiming
+local originalFOV = camera.FieldOfView -- Store original Field of View
+
+-- Weapon setup (you will need to customize this based on the specific gun you're using)
+local weapon = player.Backpack:FindFirstChild("Revolver") -- Assume player has a revolver
+local function autoShoot()
+    if weapon and weapon:FindFirstChild("Fire") then
+        weapon.Fire:Invoke() -- Simulate shooting
+        print("Auto shot in air!")
+    end
+end
+
+-- Create a Screen GUI
+local screenGui = Instance.new("ScreenGui", player.PlayerGui)
+local toggleButton = Instance.new("TextButton", screenGui)
+local autoShootButton = Instance.new("TextButton", screenGui) -- Auto Shoot button
+local statusLabel = Instance.new("TextLabel", screenGui)
+local crosshair = Instance.new("Frame", screenGui)
+
+-- Configure the aim toggle button
+toggleButton.Size = UDim2.new(0, 100, 0, 50) -- Width, Height
+toggleButton.Position = UDim2.new(1, -110, 0, 10) -- Top right corner
+toggleButton.Text = "Toggle Aim"
+toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255) -- Blue background
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255) -- White text
+toggleButton.Font = Enum.Font.SourceSans
+toggleButton.TextScaled = true
+toggleButton.BorderSizePixel = 2
+toggleButton.BorderColor3 = Color3.fromRGB(0, 0, 0) -- Black border
+toggleButton.TextStrokeTransparency = 0 -- Adds an outline to the text
+toggleButton.AutoButtonColor = false -- Disable default button behavior
+
+-- Configure the auto shoot toggle button
+autoShootButton.Size = UDim2.new(0, 100, 0, 50) -- Width, Height
+autoShootButton.Position = UDim2.new(1, -110, 0, 70) -- Below the aim button
+autoShootButton.Text = "Auto Shoot: OFF"
+autoShootButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red background
+autoShootButton.TextColor3 = Color3.fromRGB(255, 255, 255) -- White text
+autoShootButton.Font = Enum.Font.SourceSans
+autoShootButton.TextScaled = true
+autoShootButton.BorderSizePixel = 2
+autoShootButton.BorderColor3 = Color3.fromRGB(0, 0, 0) -- Black border
+autoShootButton.TextStrokeTransparency = 0 -- Adds an outline to the text
+autoShootButton.AutoButtonColor = false -- Disable default button behavior
+
+-- Configure the status label
+statusLabel.Size = UDim2.new(0, 200, 0, 50)
+statusLabel.Position = UDim2.new(1, -220, 0, 70)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Aim OFF"
+statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0) -- Red for OFF
+statusLabel.Font = Enum.Font.SourceSansBold
+statusLabel.TextScaled = true
+
+-- Configure the crosshair
+crosshair.Size = UDim2.new(0, 20, 0, 20)
+crosshair.Position = UDim2.new(0.5, -10, 0.5, -10)
+crosshair.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- White crosshair
+crosshair.Visible = false -- Hidden until aim is active
+
+-- Function to find the nearest player
+local function findNearestPlayer()
+    local nearestPlayer = nil
+    local shortestDistance = math.huge
+
+    for _, otherPlayer in ipairs(game.Players:GetPlayers()) do
+        if otherPlayer ~= player and otherPlayer.Character and otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local distance = (otherPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).magnitude
+            if distance < shortestDistance then
+                shortestDistance = distance
+                nearestPlayer = otherPlayer
+            end
+        end
+    end
+
+    return nearestPlayer
+end
+
+-- Highlight the target player
+local function highlightTarget(target)
+    if target and target.Character then
+        local highlight = Instance.new("Highlight")
+        highlight.Parent = target.Character
+        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Red for targeting
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255) -- White outline
+        highlight.Adornee = target.Character
+        wait(1) -- Duration of highlight
+        highlight:Destroy()
+    end
+end
+
+-- Lock the camera onto the target with prediction
+local function cameraLock()
+    local target = findNearestPlayer()
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+        highlightTarget(target) -- Highlight the target
+        
+        -- Get target's current position and velocity
+        local targetRootPart = target.Character.HumanoidRootPart
+        local targetPosition = targetRootPart.Position
+        local targetVelocity = targetRootPart.Velocity
+
+        -- Predict future position based on velocity and prediction factor
+        local predictedPosition = targetPosition + (targetVelocity * predictionFactor)
+
+        -- Lock the camera to the predicted position
+        camera.CFrame = CFrame.new(camera.CFrame.Position, predictedPosition) -- Instant snap to predicted position
+        lastTarget = target
+    end
+end
+
+-- Toggle camera lock
+local function toggleCameraLock()
+    aimActive = not aimActive
+
+    if aimActive then
+        print("Camera Lock: ON")
+        statusLabel.Text = "Aim ON"
+        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0) -- Green for ON
+        crosshair.Visible = true -- Show crosshair
+        camera.FieldOfView = originalFOV - zoomAmount -- Zoom in
+        while aimActive do
+            cameraLock()
+            wait(0.05) -- Faster updates
+        end
+    else
+        print("Camera Lock: OFF")
+        statusLabel.Text = "Aim OFF"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0) -- Red for OFF
+        crosshair.Visible = false -- Hide crosshair
+        camera.FieldOfView = originalFOV -- Reset zoom
+    end
+end
+
+-- Toggle auto shoot
+local function toggleAutoShoot()
+    autoShootActive = not autoShootActive
+    if autoShootActive then
+        autoShootButton.Text = "Auto Shoot: ON"
+        autoShootButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green background
+        print("Auto Shoot enabled")
+    else
+        autoShootButton.Text = "Auto Shoot: OFF"
+        autoShootButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red background
+    end
+end
+
+-- Connect the button to the toggle function
+toggleButton.MouseButton1Click:Connect(toggleCameraLock)
+autoShootButton.MouseButton1Click:Connect(toggleAutoShoot)
+
+-- Key binding for PC users
+mouse.KeyDown:Connect(function(key)
+    if key:lower() == "c" then
+        toggleCameraLock()
+    elseif key:lower() == "q" then
+        switchTarget(-1) -- Previous target
+    elseif key:lower() == "e" then
+        switchTarget(1) -- Next target
+    end
+end)
+
+-- Handle character state and auto-shoot
+local RunService = game:GetService("RunService")
+RunService.RenderStepped:Connect(function()
+    if autoShootActive and player.Character and player.Character:FindFirstChild("Humanoid") then
+        local humanoid = player.Character.Humanoid
+        -- Check if the player is falling or jumping
+        if humanoid:GetState() == Enum.HumanoidStateType.Freefall or humanoid:GetState() == Enum.HumanoidStateType.Jumping then
+            autoShoot() -- Automatically shoot when in air
+        end
+    end
+end)
